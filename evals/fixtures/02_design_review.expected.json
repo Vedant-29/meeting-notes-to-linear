@@ -1,0 +1,5 @@
+{
+  "count_min": 5,
+  "count_max": 9,
+  "must_mention": ["magic link", "iPhone", "posthog", "accessibility"]
+}

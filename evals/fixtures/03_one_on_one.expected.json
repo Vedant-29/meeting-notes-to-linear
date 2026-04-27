@@ -1,0 +1,5 @@
+{
+  "count_min": 3,
+  "count_max": 6,
+  "must_mention": ["james", "seed", "indexing"]
+}

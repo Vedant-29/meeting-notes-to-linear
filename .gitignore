@@ -1,0 +1,15 @@
+.env
+.venv/
+__pycache__/
+*.pyc
+.pytest_cache/
+*.egg-info/
+build/
+dist/
+
+# Local inbox state (if user points INBOX_DIR inside the repo)
+inbox/
+notes-inbox/
+*.processed
+*.failed
+*.failed.json

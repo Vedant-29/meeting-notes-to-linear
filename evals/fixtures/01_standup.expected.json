@@ -1,0 +1,5 @@
+{
+  "count_min": 4,
+  "count_max": 7,
+  "must_mention": ["staging", "rate limit", "postgres", "notion"]
+}

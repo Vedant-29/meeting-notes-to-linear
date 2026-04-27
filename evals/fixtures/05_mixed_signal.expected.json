@@ -1,0 +1,5 @@
+{
+  "count_min": 2,
+  "count_max": 4,
+  "must_mention": ["latency", "gong"]
+}
