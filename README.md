@@ -8,16 +8,15 @@ It has been run end to end against a real Linear workspace. The standup fixture 
 
 - `src/watcher.py` watches the folder with `watchdog` and debounces each file for 500 ms, since editors often fire several events on one save.
 - `src/extractor.py` sends the note to Claude with forced tool use. The tool schema mirrors the Pydantic `Ticket` model in `schemas/ticket.py`, which mirrors Linear's `IssueCreateInput`, so bad output fails at parse time instead of at Linear.
-- `src/linear_client.py` creates one issue per ticket over Linear's GraphQL API, creating missing labels and retrying 5xx errors 3 times.
-- `src/main.py` writes a `<note>.md.processed` marker on success. On partial failure it writes `<note>.md.failed` plus `<note>.md.failed.json` listing which tickets were created and which were not. Marked files are never processed again.
+- `src/linear_client.py` creates one issue per ticket over Linear's GraphQL API (`https://api.linear.app/graphql`). It creates missing labels, attaches the issue to a project only if a project with that name already exists in the team, and tries each request up to 3 times on 5xx and network errors. 4xx and GraphQL errors fail at once.
+- `src/main.py` writes a `<note>.md.processed` marker on success. If extraction or any ticket fails it writes `<note>.md.failed` plus `<note>.md.failed.json` listing which tickets were created and which were not. Notes with a `.processed` marker are skipped from then on.
 
 The system prompt lives in `prompts/extract_tickets.md`.
 
 ## Requirements
 
 - Python 3.11+
-- An Anthropic API key
-- A Linear personal API key
+- An Anthropic API key and a Linear personal API key (see Services)
 
 ## Setup
 
@@ -30,9 +29,26 @@ cp .env.example .env
 python -m src.main
 ```
 
-The daemon resolves your Linear team and starts watching `INBOX_DIR`. Drop a `.md` file in it. Stop with `Ctrl+C`.
+Fill in `.env` first. The daemon exits if any required variable is missing, if `INBOX_DIR` does not exist, or if a short team key like `TES` is not found in Linear. Otherwise it resolves the team and starts watching `INBOX_DIR`. Drop a `.md` file in it. Stop with `Ctrl+C`.
 
 To find your team key or UUID, run `python -m src.linear_client list-teams`. It prints every team your API key can see.
+
+## Services
+
+You need your own account and key for each. None are included in the repo.
+
+| Service | Used for | Required | Env vars |
+|---|---|---|---|
+| Anthropic API | Extracting tickets from the note (Claude, forced tool use) | Yes | `ANTHROPIC_API_KEY`, `EXTRACTOR_MODEL` |
+| Linear API | Creating issues, labels, and looking up teams and projects | Yes | `LINEAR_API_KEY`, `LINEAR_TEAM_ID` |
+
+### Anthropic
+
+Create an API key in the Anthropic Console (console.anthropic.com > API keys). The account needs billing set up. Each note is one Messages API call with up to 4096 output tokens. `EXTRACTOR_MODEL` picks the model and defaults to `claude-sonnet-4-6`.
+
+### Linear
+
+Create a personal API key in Linear > Settings > API > Personal API keys. The key needs access to the team you set in `LINEAR_TEAM_ID`, and permission to create issues and labels there. Run `python -m src.linear_client list-teams` to check the key and see each team's key and UUID. Use a test team at first, since every processed note creates real issues.
 
 ## Environment variables
 
@@ -50,6 +66,7 @@ To find your team key or UUID, run `python -m src.linear_client list-teams`. It 
 | Command | What it does |
 |---|---|
 | `python -m src.main` | Run the daemon |
+| `notes-to-linear` | Same as above, installed by `pip install -e .` |
 | `python -m src.linear_client list-teams` | Check your API key and list teams |
 | `pytest` | Run the unit tests (no network) |
 | `pytest --run-evals` | Also run the live LLM evals. Needs `ANTHROPIC_API_KEY` and costs a few cents |
@@ -72,9 +89,11 @@ To add a fixture, add a `name.md` and a `name.expected.json`. No test code chang
 
 See [TODOS.md](TODOS.md) for details.
 
-- Editing a note that was already processed can create duplicate tickets. There is no cross-run dedup yet.
+- Only `.md` files directly inside `INBOX_DIR` are watched (not subfolders), and only when they are created, saved, or moved in while the daemon runs. Notes already in the folder at startup are not picked up.
+- Edits to a note that has a `.processed` marker are ignored. Edited notes do not update existing tickets.
+- There is no cross-run dedup. Deleting a `.processed` marker, or dropping a copy of a note under a new name, creates a fresh batch of tickets.
+- Notes with a `.failed` marker are not skipped. Saving one again reprocesses the whole note, so tickets that were already created get created again.
 - There is no rate or cost limit. Dropping 100 files at once will make 100 LLM calls.
-- Edited notes do not update existing tickets.
 
 ## Credits
 
